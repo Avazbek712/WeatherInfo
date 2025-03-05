@@ -16,7 +16,7 @@ import java.util.List;
 @AllArgsConstructor
 public class ForecastDayDTO {
 
-    private LocalDate date;
+    private String date;
 
     @SerializedName("date_epoch")
     private Long dateEpoch;
@@ -27,9 +27,4 @@ public class ForecastDayDTO {
 
     private List<HourDTO> hour;
 
-    @SerializedName("maxtemp_c")
-    private double maxTemp;
-
-    @SerializedName("mintemp_c")
-    private double minTemp;
- }
+}

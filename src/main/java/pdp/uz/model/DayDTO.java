@@ -21,4 +21,10 @@ public class DayDTO {
     @SerializedName("avghumidity")
     private double avgHumidity;
 
+    @SerializedName("maxtemp_c")
+    private double maxTemp;
+
+    @SerializedName("mintemp_c")
+    private double minTemp;
+
 }

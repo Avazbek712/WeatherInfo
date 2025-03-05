@@ -40,6 +40,7 @@ public class WeatherService {
 
             String json = response.body();
 
+
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
             Gson gson = new GsonBuilder()
@@ -47,7 +48,11 @@ public class WeatherService {
                     .registerTypeAdapter(LocalDate.class, new LocalDateConverter())
                     .create();
 
-            return gson.fromJson(json, WeatherDTO.class);
+            WeatherDTO weatherDTO = gson.fromJson(json, WeatherDTO.class);
+
+
+            return weatherDTO;
+
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -76,7 +81,5 @@ public class WeatherService {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-
-
     }
 }

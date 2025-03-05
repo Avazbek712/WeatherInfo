@@ -3,7 +3,7 @@ package pdp.uz;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
-import org.telegram.telegrambots.meta.api.objects.Location;
+
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -15,12 +15,10 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 
-import pdp.uz.model.ForecastDayDTO;
 import pdp.uz.model.WeatherDTO;
 
 
-import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -41,17 +39,19 @@ public class WeatherMainBot extends TelegramLongPollingBot {
         if (update.hasMessage()) {
             Message message = update.getMessage();
 
+
             if (message.hasLocation()) {
                 Double latitude = message.getLocation().getLatitude();
                 Double longitude = message.getLocation().getLongitude();
+
                 weatherByLocation(message.getChatId().toString(), latitude, longitude);
             } else {
+
                 processMessage(message);
             }
         } else if (update.hasCallbackQuery()) {
             String data = update.getCallbackQuery().getData();
             Message message = update.getCallbackQuery().getMessage();
-
             if ("update_weather".equals(data)) {
                 editedWeather(message);
             }
@@ -62,30 +62,43 @@ public class WeatherMainBot extends TelegramLongPollingBot {
         try {
             String latitudeString = latitude.toString();
             String longitudeString = longitude.toString();
-            WeatherDTO weather = weatherService.getWeatherInfoByLocation(latitudeString, longitudeString, 1);
-            String country = weather.getLocation().getCountry();
-            String city = weather.getLocation().getName();
-            double temp = weather.getCurrent().getTempC();
-            LocalDateTime localtime = weather.getLocation().getLocaltime();
+
+            WeatherDTO weatherDTO = weatherService.getWeatherInfoByLocation(longitudeString, latitudeString, 2);
+
+            String country = weatherDTO.getLocation().getCountry();
+
+            String city = weatherDTO.getLocation().getName();
+
+            double temp = weatherDTO.getCurrent().getTempC();
+
+            LocalDateTime localtime = weatherDTO.getLocation().getLocaltime();
             DateTimeFormatter dayMonthFormatter = DateTimeFormatter.ofPattern("dd/MM");
+
             String date = dayMonthFormatter.format(localtime);
-            double maxTemp = weather.getForecast().getForecastDay()
-                    .stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date)).
-                    map(ForecastDayDTO::getMaxTemp).findFirst().orElse(0.0);
-            double minTemp = weather.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
-                    .map(ForecastDayDTO::getMinTemp).findFirst().orElse(0.0);
-            String text1 = weather.getCurrent().getCondition().getText();
-            double windKph = weather.getCurrent().getWindKph();
-            double humidity = weather.getCurrent().getHumidity();
-            String sunRise = weather.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
+
+            double maxTemp = weatherDTO.getForecast().getForecastDay().stream()
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
+                    .map(forecastDayDTO -> forecastDayDTO.getDay().getMaxTemp()).findFirst().orElse(0.0);
+
+            double minTemp = weatherDTO.getForecast().getForecastDay().stream()
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
+                    .map(forecastDayDTO -> forecastDayDTO.getDay().getMinTemp()).findFirst().orElse(0.0);
+
+            String condition = weatherDTO.getCurrent().getCondition().getText();
+
+            double windKph = weatherDTO.getCurrent().getWindKph();
+
+            double humidity = weatherDTO.getCurrent().getHumidity();
+
+            String sunRise = weatherDTO.getForecast().getForecastDay().stream()
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
                     .map(forecastDayDTO -> forecastDayDTO.getAstro().getSunrise()).findFirst().orElse("Нет данных");
-            String sunSet = weather.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
+
+            String sunSet = weatherDTO.getForecast().getForecastDay().stream()
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
                     .map(forecastDayDTO -> forecastDayDTO.getAstro().getSunset()).findFirst().orElse("Нет данных");
             String time = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+
             String text = """
                     <b>📆 Дата:</b> %s
                     <b>⏰ Время:</b> %s
@@ -98,10 +111,10 @@ public class WeatherMainBot extends TelegramLongPollingBot {
                     <b>💧 Влажность:</b> %d \s
                     <b>🌅 Восход:</b> %s \s
                     <b>🌇 Закат:</b> %s \s
-                    """.formatted(date, time, country, city, (int) temp, (int) maxTemp, (int) minTemp, text1, (int) windKph, (int) humidity, sunRise, sunSet);
+                    """.formatted(date, time, country, city, (int) temp, (int) maxTemp, (int) minTemp, condition, (int) windKph, (int) humidity, sunRise, sunSet);
+
             InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
             List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
-
             InlineKeyboardButton updateButton = new InlineKeyboardButton();
             updateButton.setText("🔄 Обновить");
             updateButton.setCallbackData("update_weather");
@@ -120,12 +133,21 @@ public class WeatherMainBot extends TelegramLongPollingBot {
 
         switch (text) {
             case "/start" -> userStart(message);
-
-            case "\uD83C\uDF24 Текущая погода" -> nowWeather(message);
+            case "🌤 Текущая погода" -> nowWeather(message);
 
             case "ℹ️ О боте" -> botInfo(message);
-            case "\uD83C\uDF0D Геолокация" -> {
-
+            case "🌍 Геолокация" -> {
+            }
+            default -> {
+                String chatId = message.getChatId().toString();
+                String textDef = """
+                        ❌ <b>Неизвестная команда!</b>
+                        Попробуйте использовать кнопки или команды:
+                        - <b>/start</b> – Начать
+                        - <b>🌤 Текущая погода</b> – Узнать погоду
+                        - <b>ℹ️ О боте</b> – Информация
+                        """;
+                sendTextMessage(chatId, textDef);
             }
         }
     }
@@ -155,31 +177,46 @@ public class WeatherMainBot extends TelegramLongPollingBot {
     private void editedWeather(Message message) {
         try {
             Integer messageId = message.getMessageId();
-            WeatherDTO weatherDTO = weatherService.getWeatherInfo("Tashkent", 1);
+
+            WeatherDTO weatherDTO = weatherService.getWeatherInfo("Tashkent", 2);
+
             String chatId = message.getChatId().toString();
+
             String country = weatherDTO.getLocation().getCountry();
+
             String city = weatherDTO.getLocation().getName();
+
             double temp = weatherDTO.getCurrent().getTempC();
+
             LocalDateTime localtime = weatherDTO.getLocation().getLocaltime();
             DateTimeFormatter dayMonthFormatter = DateTimeFormatter.ofPattern("dd/MM");
+
             String date = dayMonthFormatter.format(localtime);
-            double maxTemp = weatherDTO.getForecast().getForecastDay()
-                    .stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date)).
-                    map(ForecastDayDTO::getMaxTemp).findFirst().orElse(0.0);
+
+            double maxTemp = weatherDTO.getForecast().getForecastDay().stream()
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
+                    .map(forecastDayDTO -> forecastDayDTO.getDay().getMaxTemp()).findFirst().orElse(0.0);
+
             double minTemp = weatherDTO.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
-                    .map(ForecastDayDTO::getMinTemp).findFirst().orElse(0.0);
-            String text1 = weatherDTO.getCurrent().getCondition().getText();
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
+                    .map(forecastDayDTO -> forecastDayDTO.getDay().getMinTemp()).findFirst().orElse(0.0);
+
+            String condition = weatherDTO.getCurrent().getCondition().getText();
+
             double windKph = weatherDTO.getCurrent().getWindKph();
+
             double humidity = weatherDTO.getCurrent().getHumidity();
+
             String sunRise = weatherDTO.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
                     .map(forecastDayDTO -> forecastDayDTO.getAstro().getSunrise()).findFirst().orElse("Нет данных");
+
             String sunSet = weatherDTO.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
                     .map(forecastDayDTO -> forecastDayDTO.getAstro().getSunset()).findFirst().orElse("Нет данных");
+
             String time = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+
             String text = """
                     <b>📆 Дата:</b> %s
                     <b>⏰ Последнее обновление:</b> %s
@@ -192,7 +229,7 @@ public class WeatherMainBot extends TelegramLongPollingBot {
                     <b>💧 Влажность:</b> %d \s
                     <b>🌅 Восход:</b> %s \s
                     <b>🌇 Закат:</b> %s \s
-                    """.formatted(date, time, country, city, (int) temp, (int) maxTemp, (int) minTemp, text1, (int) windKph, (int) humidity, sunRise, sunSet);
+                    """.formatted(date, time, country, city, (int) temp, (int) maxTemp, (int) minTemp, condition, (int) windKph, (int) humidity, sunRise, sunSet);
             InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
             List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
 
@@ -211,48 +248,63 @@ public class WeatherMainBot extends TelegramLongPollingBot {
 
     }
 
+
     private void nowWeather(Message message) {
         try {
-            WeatherDTO weatherDTO = weatherService.getWeatherInfo("Tashkent", 1);
+            WeatherDTO weatherDTO = weatherService.getWeatherInfo("Tashkent", 2);
+
             String chatId = message.getChatId().toString();
+
             String country = weatherDTO.getLocation().getCountry();
             String city = weatherDTO.getLocation().getName();
+
             double temp = weatherDTO.getCurrent().getTempC();
+
             LocalDateTime localtime = weatherDTO.getLocation().getLocaltime();
             DateTimeFormatter dayMonthFormatter = DateTimeFormatter.ofPattern("dd/MM");
+
             String date = dayMonthFormatter.format(localtime);
-            double maxTemp = weatherDTO.getForecast().getForecastDay()
-                    .stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date)).
-                    map(ForecastDayDTO::getMaxTemp).findFirst().orElse(0.0);
+
+            double maxTemp = weatherDTO.getForecast().getForecastDay().stream()
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
+                    .map(forecastDayDTO -> forecastDayDTO.getDay().getMaxTemp()).findFirst().orElse(0.0);
+
             double minTemp = weatherDTO.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
-                    .map(ForecastDayDTO::getMinTemp).findFirst().orElse(0.0);
-            String text1 = weatherDTO.getCurrent().getCondition().getText();
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
+                    .map(forecastDayDTO -> forecastDayDTO.getDay().getMinTemp()).findFirst().orElse(0.0);
+
+            String condition = weatherDTO.getCurrent().getCondition().getText();
+
             double windKph = weatherDTO.getCurrent().getWindKph();
+
             double humidity = weatherDTO.getCurrent().getHumidity();
+
             String sunRise = weatherDTO.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
                     .map(forecastDayDTO -> forecastDayDTO.getAstro().getSunrise()).findFirst().orElse("Нет данных");
+
             String sunSet = weatherDTO.getForecast().getForecastDay().stream()
-                    .filter(forecastDayDTO -> forecastDayDTO.getDate().equals(date))
+                    .filter(forecastDayDTO -> LocalDate.parse(forecastDayDTO.getDate()).equals(LocalDate.now()))
                     .map(forecastDayDTO -> forecastDayDTO.getAstro().getSunset()).findFirst().orElse("Нет данных");
+
             String time = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+
             String text = """
                     <b>📆 Дата:</b> %s
                     <b>⏰ Время:</b> %s
                     <b>🌍 Страна:</b> %s \s
                     <b>🌍 Город:</b> %s \s
                     <b>🌡 Температура:</b> %d°C \s
-                    <b>📈 Макс:</b> %d°C  |  <b>📉 Мин:</b> %d°C \s
+                    <b>📈 Макс:</b> %d °C  |  <b>📉 Мин:</b> %d °C \s
                     <b>☁️ Описание:</b> %s \s
                     <b>💨 Ветер:</b> %d км/ч \s
-                    <b>💧 Влажность:</b> %d \s
+                    <b>💧 Влажность:</b> %d Процентов. \s
                     <b>🌅 Восход:</b> %s \s
                     <b>🌇 Закат:</b> %s \s
-                    """.formatted(date, time, country, city, (int) temp, (int) maxTemp, (int) minTemp, text1, (int) windKph, (int) humidity, sunRise, sunSet);
+                    """.formatted(date, time, country, city, (int) temp, (int) maxTemp, (int) minTemp, condition, (int) windKph, (int) humidity, sunRise, sunSet);
             InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
             List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+
 
             InlineKeyboardButton updateButton = new InlineKeyboardButton();
             updateButton.setText("🔄 Обновить");
@@ -264,10 +316,8 @@ public class WeatherMainBot extends TelegramLongPollingBot {
 
             sendTextMessage(chatId, text, inlineKeyboard);
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
-
-
     }
 
     private void userStart(Message message) {
