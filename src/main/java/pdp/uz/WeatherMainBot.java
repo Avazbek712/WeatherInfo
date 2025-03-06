@@ -28,6 +28,7 @@ import java.util.*;
  */
 public class WeatherMainBot extends TelegramLongPollingBot {
     private final Map<Long, String> userCountry = new HashMap<>();
+    private final Map<Long, Boolean> waitingForCity = new HashMap<>();
     WeatherService weatherService = new WeatherService();
 
     public WeatherMainBot(String token) {
@@ -130,6 +131,11 @@ public class WeatherMainBot extends TelegramLongPollingBot {
 
     private void processMessage(Message message) {
         String text = message.getText();
+        if (waitingForCity.containsKey(message.getChatId())) {
+            changeCity(message);
+            return;
+        }
+
 
         switch (text) {
             case "/start" -> userStart(message);
@@ -138,6 +144,8 @@ public class WeatherMainBot extends TelegramLongPollingBot {
             case "ℹ️ О боте" -> botInfo(message);
             case "🌍 Геолокация" -> {
             }
+            case "⚙️ Настройки" -> settings(message);
+            case "\uD83C\uDF0D Изменить город" -> askForCity(message);
             default -> {
                 String chatId = message.getChatId().toString();
                 String textDef = """
@@ -150,6 +158,41 @@ public class WeatherMainBot extends TelegramLongPollingBot {
                 sendTextMessage(chatId, textDef);
             }
         }
+    }
+
+    private void askForCity(Message message) {
+        Long chatId = message.getChatId();
+
+        waitingForCity.put(chatId, true);
+
+        String text = "✍️ <b>Введите название города</b> (например, Москва)";
+        sendTextMessage(chatId.toString(), text);
+
+
+    }
+
+    private void changeCity(Message message) {
+        try {
+            Long chatId = message.getChatId();
+
+            String city = message.getText();
+
+            WeatherDTO weather = weatherService.getWeatherInfo(city, 2);
+            if (Objects.nonNull(weather.getLocation())) {
+                userCountry.put(chatId, city);
+
+                waitingForCity.remove(chatId);
+                String text = "✅ <b>Ваш город сохранён:</b> " + city;
+                sendTextMessage(chatId.toString(), text);
+
+            } else {
+                sendTextMessage(chatId.toString(), "❌ <b>Город не найден, попробуйте снова.</b>");
+            }
+        } catch (InterruptedException e) {
+            sendTextMessage(message.getChatId().toString(), "❌ <b>Ошибка запроса, попробуйте позже.</b>");
+        }
+
+
     }
 
     private void botInfo(Message message) {
@@ -178,7 +221,9 @@ public class WeatherMainBot extends TelegramLongPollingBot {
         try {
             Integer messageId = message.getMessageId();
 
-            WeatherDTO weatherDTO = weatherService.getWeatherInfo("Tashkent", 2);
+            String choosenCity = userCountry.getOrDefault(message.getChatId(), "Tashkent");
+
+            WeatherDTO weatherDTO = weatherService.getWeatherInfo(choosenCity, 2);
 
             String chatId = message.getChatId().toString();
 
@@ -251,9 +296,12 @@ public class WeatherMainBot extends TelegramLongPollingBot {
 
     private void nowWeather(Message message) {
         try {
-            WeatherDTO weatherDTO = weatherService.getWeatherInfo("Tashkent", 2);
+            String choosenCity = userCountry.getOrDefault(message.getChatId(), "Tashkent");
+
+            WeatherDTO weatherDTO = weatherService.getWeatherInfo(choosenCity, 2);
 
             String chatId = message.getChatId().toString();
+
 
             String country = weatherDTO.getLocation().getCountry();
             String city = weatherDTO.getLocation().getName();
@@ -352,6 +400,35 @@ public class WeatherMainBot extends TelegramLongPollingBot {
         rows.add(row1);
         rows.add(row2);
         markup.setKeyboard(rows);
+        sendTextMessage(chatId, text, markup);
+    }
+
+    private void settings(Message message) {
+        String chatId = message.getChatId().toString();
+        String text = """
+                ⚙️ <b>Настройки</b> \s
+                Выберите, что хотите изменить: \s
+                🌍 <b>Изменить город</b> – задайте город, по которому будет показываться погода. \s
+                🔔 <b>Уведомления</b> – включите или выключите ежедневные прогнозы. \s
+                🔙 <b>Назад</b> – вернуться в главное меню. \s
+                """;
+
+        ReplyKeyboardMarkup markup = new ReplyKeyboardMarkup();
+        KeyboardRow row1 = new KeyboardRow();
+        row1.add("\uD83C\uDF0D Изменить город");
+
+        KeyboardRow row2 = new KeyboardRow();
+        row2.add("\uD83D\uDD14 Уведомления (вкл/выкл)");
+
+        KeyboardRow row3 = new KeyboardRow();
+        row3.add("\uD83D\uDD19 Назад в главное меню");
+
+        List<KeyboardRow> rows = new ArrayList<>();
+        rows.add(row1);
+        rows.add(row2);
+        rows.add(row3);
+        markup.setKeyboard(rows);
+
         sendTextMessage(chatId, text, markup);
     }
 
